@@ -189,19 +189,27 @@ static void register_error(hid_device *device, const char *op)
 #endif
 
 
-static int32_t get_int_property(IOHIDDeviceRef device, CFStringRef key)
+static bool get_int_property_checked(IOHIDDeviceRef device, CFStringRef key, int32_t *outInt)
 {
 	CFTypeRef ref;
-	int32_t value;
 
 	ref = IOHIDDeviceGetProperty(device, key);
 	if (ref) {
 		if (CFGetTypeID(ref) == CFNumberGetTypeID()) {
-			CFNumberGetValue((CFNumberRef) ref, kCFNumberSInt32Type, &value);
-			return value;
+			CFNumberGetValue((CFNumberRef) ref, kCFNumberSInt32Type, outInt);
+			return true;
 		}
 	}
-	return 0;
+	return false;
+}
+
+static int32_t get_int_property(IOHIDDeviceRef device, CFStringRef key)
+{
+	int32_t value = 0;
+
+	get_int_property_checked(device, key, &value);
+
+	return value;
 }
 
 static unsigned short get_vendor_id(IOHIDDeviceRef device)
@@ -489,8 +497,23 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 			/* Release Number */
 			cur_dev->release_number = get_int_property(dev, CFSTR(kIOHIDVersionNumberKey));
 
-			/* Interface Number (Unsupported on Mac)*/
+			/* Interface Number, default to -1 in case of error */
 			cur_dev->interface_number = -1;
+			io_registry_entry_t parentEntry = 0;
+
+			/* Find parent entry in IORegistry */
+			if (IORegistryEntryGetParentEntry(iokit_dev, kIOServicePlane, &parentEntry) == KERN_SUCCESS) {
+				int32_t interface_number = -1;
+
+				/* Attempt to get the USB interface number from the parent entry */
+				if (get_int_property_checked(dev, CFSTR("bInterfaceNumber"), &interface_number)) {
+					/* Set the interface number in case of success */
+					cur_dev->interface_number = interface_number;
+				}
+
+				IOObjectRelease(parentEntry);
+				parentEntry = 0;
+			}
 		}
 	}
 

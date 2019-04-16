@@ -18,3 +18,9 @@ windows/Makefile.in
 Makefile
 stamp-h1
 libtool
+*.filters
+*.vcxproj.user
+
+windows/hidapi\.VC\.VC\.opendb
+
+windows/hidapi\.VC\.db
